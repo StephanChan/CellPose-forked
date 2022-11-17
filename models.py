@@ -106,7 +106,7 @@ class Cellpose():
              invert=False, normalize=True, diameter=30., do_3D=False, anisotropy=None,
              net_avg=False, augment=False, tile=True, tile_overlap=0.1, resample=True, interp=True,
              flow_threshold=0.4, cellprob_threshold=0.0, min_size=150, stitch_threshold=0.0, 
-             rescale=None, progress=None, model_loaded=False):
+             rescale=None, progress=None, model_loaded=False,BF=None,BF_check=False, my_mask=None):
         """ run cellpose and get masks
 
         Parameters
@@ -204,7 +204,7 @@ class Cellpose():
         diams: list of diameters, or float (if do_3D=True)
 
         """        
-
+        print(x.shape)
         tic0 = time.time()
         channels = [0,0] if channels is None else channels # why not just make this a default in the function header?
 
@@ -236,6 +236,7 @@ class Cellpose():
 
         tic = time.time()
         models_logger.info('~~~ FINDING MASKS ~~~')
+        # print('min size in cellpose: ',min_size)
         masks, flows, styles = self.cp.eval(x, 
                                             batch_size=batch_size, 
                                             invert=invert, 
@@ -258,7 +259,8 @@ class Cellpose():
                                             cellprob_threshold=cellprob_threshold,
                                             min_size=min_size, 
                                             stitch_threshold=stitch_threshold,
-                                            model_loaded=model_loaded)
+                                            model_loaded=model_loaded,
+                                            BF=BF,BF_check=BF_check, my_mask=my_mask)
         models_logger.info('>>>> TOTAL TIME %0.2f sec'%(time.time()-tic0))
     
         return masks, flows, styles, diams
@@ -386,7 +388,7 @@ class CellposeModel(UnetModel):
              resample=True, interp=True,
              flow_threshold=0.4, cellprob_threshold=0.0,
              compute_masks=True, min_size=150, stitch_threshold=0.0, progress=None,  
-             loop_run=False, model_loaded=False):
+             loop_run=False, model_loaded=False,BF=None,BF_check=False, my_mask=None):
         """
             segment list of images x, or 4D array - Z x nchan x Y x X
 
@@ -492,7 +494,7 @@ class CellposeModel(UnetModel):
                 style vector summarizing each image, also used to estimate size of objects in image
 
         """
-        
+        # print('min size in cellposeModel: ',min_size)
         if isinstance(x, list) or x.squeeze().ndim==5:
             masks, styles, flows = [], [], []
             tqdm_out = utils.TqdmToLogger(models_logger, level=logging.INFO)
@@ -548,7 +550,7 @@ class CellposeModel(UnetModel):
             elif rescale is None:
                 diameter = self.diam_labels
                 rescale = self.diam_mean / diameter
-
+            # print('min size in cellposeModel pos2: ',min_size)
             masks, styles, dP, cellprob, p = self._run_cp(x, 
                                                           compute_masks=compute_masks,
                                                           normalize=normalize,
@@ -566,6 +568,7 @@ class CellposeModel(UnetModel):
                                                           do_3D=do_3D, 
                                                           anisotropy=anisotropy,
                                                           stitch_threshold=stitch_threshold,
+                                                          BF=BF,BF_check=BF_check, my_mask=my_mask
                                                           )
             
             flows = [plot.dx_to_circ(dP), dP, cellprob, p]
@@ -575,8 +578,8 @@ class CellposeModel(UnetModel):
                 rescale=1.0, net_avg=False, resample=True,
                 augment=False, tile=True, tile_overlap=0.1,
                 cellprob_threshold=0.0, 
-                flow_threshold=0.4, min_size=15,
-                interp=True, anisotropy=1.0, do_3D=False, stitch_threshold=0.0,
+                flow_threshold=0.4, min_size=150,
+                interp=True, anisotropy=1.0, do_3D=False, stitch_threshold=0.0,BF=None,BF_check=False,my_mask=None
                 ):
         
         tic = time.time()
@@ -613,6 +616,7 @@ class CellposeModel(UnetModel):
                     img = transforms.normalize_img(img, invert=invert)
                 if rescale != 1.0:
                     img = transforms.resize_image(img, rsz=rescale)
+                print('image size in _run_cp: ',img.shape)
                 yf, style = self._run_nets(img, net_avg=net_avg,
                                            augment=augment, tile=tile,
                                            tile_overlap=tile_overlap)
@@ -633,7 +637,7 @@ class CellposeModel(UnetModel):
         net_time = time.time() - tic
         if nimg > 1:
             models_logger.info('network run in %2.2fs'%(net_time))
-
+        # print('min size in model run_cp: ',min_size)
         if compute_masks:
             tic=time.time()
             niter = 200 if (do_3D and not resample) else (1 / rescale * 200)
@@ -643,15 +647,15 @@ class CellposeModel(UnetModel):
                                                       flow_threshold=flow_threshold,
                                                       interp=interp, do_3D=do_3D, min_size=min_size,
                                                       resize=None,
-                                                      use_gpu=self.gpu, device=self.device
+                                                      use_gpu=self.gpu, device=self.device, my_mask=my_mask
                                                     )
             else:
                 masks, p = [], []
                 resize = [shape[1], shape[2]] if not resample else None
                 for i in iterator:
                     outputs = dynamics.compute_masks(dP[:,i], cellprob[i], niter=niter, cellprob_threshold=cellprob_threshold,
-                                                         flow_threshold=flow_threshold, interp=interp, resize=resize,
-                                                         use_gpu=self.gpu, device=self.device)
+                                                         flow_threshold=flow_threshold, interp=interp, resize=resize, min_size=min_size,
+                                                         use_gpu=self.gpu, device=self.device,BF=BF,BF_check=BF_check, my_mask=my_mask)
                     masks.append(outputs[0])
                     p.append(outputs[1])
                     

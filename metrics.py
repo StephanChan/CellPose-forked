@@ -288,3 +288,6 @@ def flow_error(maski, dP_net, use_gpu=False, device=None):
 
     return flow_errors, dP_masks
     # print("flow_error function disabled")
+
+def mask_roundness(maski,use_gpu,device):
+    print(1)

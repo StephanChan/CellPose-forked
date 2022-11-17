@@ -441,8 +441,6 @@ def fill_holes_and_remove_small_masks(masks, min_size=150):
         size [Ly x Lx] or [Lz x Ly x Lx]
     
     """
-    min_size=150
-    print(min_size)
     if masks.ndim > 3 or masks.ndim < 2:
         raise ValueError('masks_to_outlines takes 2D or 3D array, not %dD array'%masks.ndim)
     
@@ -501,9 +499,24 @@ def split_live_dead_cells(masks, RFP_path, GFP_path, RThreshold=40, GThreshold=1
             if GFP_cell[cell]>GThreshold:
                 live_mask[masks==cell]=1
                 live_cell_size_hist[cell]=np.sum(masks[masks==cell])/cell
+    plt.figure()
     plt.hist(live_cell_size_hist[live_cell_size_hist>0],50)
     plt.xlabel('cell size (pixels)')
     plt.ylabel('cell count')
     plt.title('cell size distribution')
 
     return live_mask, dead_mask
+
+def sum_GFP_RFP_for_pred(image_names):
+    # print(image_names)
+    for ith in image_names:
+        base_name=os.path.splitext(os.path.basename(ith))[0]
+        base_dir=os.path.dirname(ith)
+        GFP_name=os.path.join(base_dir,base_name[:-2]+f'GFP.tif')
+        GFP=my_io.imread(GFP_name)
+        RFP_name=os.path.join(base_dir,base_name[:-2]+f'RFP.tif')
+        RFP=my_io.imread(RFP_name)
+        merge=GFP[:,:,1]/2+RFP[:,:,0]/2
+        im = Image.fromarray(merge.astype(np.uint8))
+        im.save(os.path.join(base_dir,base_name[:-2]+f'merge.tif'))
+        

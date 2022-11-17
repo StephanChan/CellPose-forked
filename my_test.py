@@ -30,11 +30,14 @@ def main():
     input_img_args.add_argument('--dir',
                         default=[], type=str, help='folder containing data to run or train on.')
     input_img_args.add_argument('--image_path',
-                        default=[r'C:\Users\ScanImage\CellCounting\images\BF.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
+                        default=[r'C:\Users\ScanImage\CellCounting\New folder\1\Ch A\23-dsd harvest 3_A_01_RAW_GFP.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
     input_img_args.add_argument('--RFP_path',
-                        default=[r'C:\Users\ScanImage\CellCounting\images\RFP.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
+                        default=[r'C:\Users\ScanImage\CellCounting\New folder\1\Ch A\23-dsd harvest 3_A_01_RAW_RFP.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
     input_img_args.add_argument('--GFP_path',
-                        default=[r'C:\Users\ScanImage\CellCounting\images\GFP.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
+                        default=[r'C:\Users\ScanImage\CellCounting\New folder\1\Ch A\23-dsd harvest 3_A_01_RAW_GFP.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
+    input_img_args.add_argument('--luna_path',
+                        default=[r'C:\Users\ScanImage\CellCounting\New folder\1\Ch A\23-dsd harvest 3_A_01_TAG_ALL.tif'], type=str, help='if given and --dir not given, run on single image instead of folder (cannot train with this option)')
+    
     input_img_args.add_argument('--look_one_level_down', action='store_true', help='run processing on all subdirectories of current folder')
     input_img_args.add_argument('--img_filter',
                         default=[], type=str, help='end string for images to run on')
@@ -63,13 +66,13 @@ def main():
     algorithm_args.add_argument('--no_interp', action='store_true', help='do not interpolate when running dynamics (was default)')
     algorithm_args.add_argument('--no_norm', action='store_true', help='do not normalize images (normalize=False)')
     algorithm_args.add_argument('--do_3D', action='store_true', help='process images as 3D stacks of images (nplanes x nchan x Ly x Lx')
-    algorithm_args.add_argument('--diameter', required=False, default=20., type=float, 
+    algorithm_args.add_argument('--diameter', required=False, default=8., type=float, 
                         help='cell diameter, if 0 will use the diameter of the training labels used in the model, or with built-in model will estimate diameter for each image')
     algorithm_args.add_argument('--stitch_threshold', required=False, default=0.0, type=float, help='compute masks in 2D then stitch together masks with IoU>0.9 across planes')
     algorithm_args.add_argument('--fast_mode', action='store_true', help='now equivalent to --no_resample; make code run faster by turning off resampling')
     
-    algorithm_args.add_argument('--flow_threshold', default=0.4, type=float, help='flow error threshold, 0 turns off this optional QC step. Default: %(default)s')
-    algorithm_args.add_argument('--cellprob_threshold', default=0, type=float, help='cellprob threshold, default is 0, decrease to find more and larger masks')
+    algorithm_args.add_argument('--flow_threshold', default=0.0, type=float, help='flow error threshold, 0 turns off this optional QC step. Default: %(default)s')
+    algorithm_args.add_argument('--cellprob_threshold', default=-0.3, type=float, help='cellprob threshold, default is 0, decrease to find more and larger masks')
     
     algorithm_args.add_argument('--anisotropy', required=False, default=1.0, type=float,
                         help='anisotropy of volume in 3D')
@@ -89,36 +92,6 @@ def main():
     output_args.add_argument('--save_ncolor', action='store_true', help='whether or not to save minimal "n-color" masks (disabled by default')
     output_args.add_argument('--save_txt', action='store_true', help='flag to enable txt outlines for ImageJ (disabled by default)')
 
-    # # training settings
-    # training_args = parser.add_argument_group("training arguments")
-    # training_args.add_argument('--train', action='store_true', help='train network using images in dir')
-    # training_args.add_argument('--train_size', action='store_true', help='train size network at end of training')
-    # training_args.add_argument('--test_dir',
-    #                     default=[], type=str, help='folder containing test data (optional)')
-    # training_args.add_argument('--mask_filter',
-    #                     default='_masks', type=str, help='end string for masks to run on. use "_seg.npy" for manual annotations from the GUI. Default: %(default)s')
-    # training_args.add_argument('--diam_mean',
-    #                     default=30., type=float, help='mean diameter to resize cells to during training -- if starting from pretrained models it cannot be changed from 30.0')
-    # training_args.add_argument('--learning_rate',
-    #                     default=0.2, type=float, help='learning rate. Default: %(default)s')
-    # training_args.add_argument('--weight_decay',
-    #                     default=0.00001, type=float, help='weight decay. Default: %(default)s')
-    # training_args.add_argument('--n_epochs',
-    #                     default=500, type=int, help='number of epochs. Default: %(default)s')
-    # training_args.add_argument('--batch_size',
-    #                     default=8, type=int, help='batch size. Default: %(default)s')
-    # training_args.add_argument('--min_train_masks',
-    #                     default=5, type=int, help='minimum number of masks a training image must have to be used. Default: %(default)s')
-    # training_args.add_argument('--residual_on',
-    #                     default=1, type=int, help='use residual connections')
-    # training_args.add_argument('--style_on',
-    #                     default=1, type=int, help='use style vector')
-    # training_args.add_argument('--concatenation',
-    #                     default=0, type=int, help='concatenate downsampled layers with upsampled layers (off by default which means they are added)')
-    # training_args.add_argument('--save_every',
-    #                     default=100, type=int, help='number of epochs to skip between saves. Default: %(default)s')
-    # training_args.add_argument('--save_each', action='store_true', help='save the model under a different filename per --save_every epoch for later comparsion')
-    
     # misc settings
     parser.add_argument('--verbose', action='store_true', default=True, help='show information about running and settings and save to log')
     
@@ -137,7 +110,6 @@ def main():
         print('No --verbose => no progress or info printed')
         logger = logging.getLogger(__name__)
 
-    use_gpu = True
     channels = [args.chan, args.chan2]
 
     # find images
@@ -224,6 +196,7 @@ def main():
     
     for image_name in tqdm(image_names, file=tqdm_out):
         image = my_io.imread(image_name)
+        print('image shape: ',image.shape)
         out = model.eval(image, channels=channels, diameter=diameter,
                         do_3D=args.do_3D, net_avg=(not args.fast_mode or args.net_avg),
                         augment=False,
@@ -232,7 +205,7 @@ def main():
                         cellprob_threshold=args.cellprob_threshold,
                         stitch_threshold=args.stitch_threshold,
                         invert=args.invert,
-                        min_size=150,
+                        min_size=100,
                         # batch_size=args.batch_size,
                         interp=(not args.no_interp),
                         normalize=(not args.no_norm),
@@ -255,7 +228,7 @@ def main():
                           save_ncolor=args.save_ncolor,dir_above=args.dir_above,savedir=args.savedir,
                           save_txt=args.save_txt,in_folders=args.in_folders)
         live,dead = utils.split_live_dead_cells(masks, args.RFP_path, args.GFP_path, RThreshold=40, GThreshold=12)
-        utils.plot_results_with_input(live, dead, image, [r'C:\Users\ScanImage\CellCounting\images\Luna.tif'])
+        utils.plot_results_with_input(live, dead, image, args.luna_path)
     logger.info('>>>> completed in %0.3f sec'%(time.time()-tic))
   
 if __name__ == '__main__':

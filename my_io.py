@@ -199,6 +199,79 @@ def get_image_files(folder, mask_filter, imf=None, look_one_level_down=False):
         
     return image_names
         
+def my_get_BF_image_files(folder, look_one_level_down=False):
+    """ find all images in a folder and if look_one_level_down all subfolders """
+    # mask_filters = ['_cp_masks', '_cp_output', '_flows', '_masks', name_mask]
+    BF_image_names = []
+
+    folders = []
+    if look_one_level_down:
+        folders = natsorted(glob.glob(os.path.join(folder, "*/")))
+    folders.append(folder)
+    l0 = 0
+    for folder in folders:
+        BF_image_names.extend(glob.glob(folder + f'/*_BF.tif'))
+        l0 += len(BF_image_names)
+    
+    if l0==0:
+        raise ValueError("ERROR: no images in --dir folder with extensions '.png', '.jpg', '.jpeg', '.tif', '.tiff'")
+
+    BF_image_names = natsorted(BF_image_names)
+    
+    if len(BF_image_names)==0:
+        raise ValueError('ERROR: no images in --dir folder without _masks or _flows ending')
+        
+    return BF_image_names
+
+def my_get_image_files(folder, look_one_level_down=False):
+    """ find all images in a folder and if look_one_level_down all subfolders """
+    # mask_filters = ['_cp_masks', '_cp_output', '_flows', '_masks', mask_filter]
+    image_names = []
+    # if imf is None:
+    #     imf = ''
+    
+    folders = []
+    if look_one_level_down:
+        folders = natsorted(glob.glob(os.path.join(folder, "*/")))
+    folders.append(folder)
+    # exts = ['.png', '.jpg', '.jpeg', '.tif', '.tiff']
+    ext='_BF.tif'
+    l0 = 0
+    # al = 0
+    for folder in folders:
+        # all_files = glob.glob(folder + '/*')
+        # print(all_files)
+        # al += len(all_files)
+        # for ext in exts:
+        image_names.extend(glob.glob(folder + f'/*{ext}'))
+            # image_names.extend(glob.glob(folder + f'/*{imf}{ext.upper()}'))
+        l0 += len(image_names)
+    
+    # return error if no files found
+    # if al==0:
+    #     raise ValueError('ERROR: no files in --dir folder ')
+    if l0==0:
+        raise ValueError("ERROR: no images in --dir folder with extensions '.png', '.jpg', '.jpeg', '.tif', '.tiff'")
+
+    image_names = natsorted(image_names)
+    # print(image_names)
+    # imn = []
+    # for im in image_names:
+    #     imfile = os.path.splitext(im)[0]
+    #     # print(imfile)
+    #     igood = all([(len(imfile) > len(mask_filter) and imfile[-len(mask_filter):] != mask_filter) or len(imfile) <= len(mask_filter) 
+    #                     for mask_filter in mask_filters])
+    #     if len(imf)>0:
+    #         igood &= imfile[-len(imf):]==imf
+    #     if igood:
+    #         imn.append(im)
+    # image_names = imn
+    
+    if len(image_names)==0:
+        raise ValueError('ERROR: no images in --dir folder without _masks or _flows ending')
+        
+    return image_names
+
 def get_label_files(image_names, mask_filter, imf=None):
     nimg = len(image_names)
     label_names0 = [os.path.splitext(image_names[n])[0] for n in range(nimg)]
@@ -238,13 +311,43 @@ def get_label_files(image_names, mask_filter, imf=None):
 
     return label_names, flow_names
 
+def my_get_label_files(image_names):
+    mask_filter='merge_cp_masks'
+    nimg = len(image_names)
+    label_names0 = [os.path.splitext(image_names[n])[0] for n in range(nimg)]
+
+    label_names = label_names0
+        
+    io_logger.info('not all flows are present, running flow generation for all images')
+    flow_names = None
+    
+    # check for masks
+    # if mask_filter =='_seg.npy':
+    #     label_names = [label_names[n] + mask_filter for n in range(nimg)]
+    #     return label_names, None
+
+    if os.path.exists(label_names[0][:-2] + mask_filter + '.tif'):
+        label_names = [label_names[n][0:-2] + mask_filter + '.tif' for n in range(nimg)]
+    # elif os.path.exists(label_names[0] + mask_filter + '.tiff'):
+    #     label_names = [label_names[n] + mask_filter + '.tiff' for n in range(nimg)]
+    # elif os.path.exists(label_names[0] + mask_filter + '.png'):
+    #     label_names = [label_names[n] + mask_filter + '.png' for n in range(nimg)]
+    # todo, allow _seg.npy
+    #elif os.path.exists(label_names[0] + '_seg.npy'):
+    #    io_logger.info('labels found as _seg.npy files, converting to tif')
+    else:
+        raise ValueError('labels not provided with correct --mask_filter')
+    # if not all([os.path.exists(label) for label in label_names]):
+    #     raise ValueError('labels not provided for all images in train and/or test set')
+
+    return label_names, flow_names
 
 def load_images_labels(tdir, mask_filter='_masks', image_filter=None, look_one_level_down=False, unet=False):
-    image_names = get_image_files(tdir, mask_filter, image_filter, look_one_level_down)
+    image_names = my_get_image_files(tdir, look_one_level_down)  ########################## used my function
     nimg = len(image_names)
 
     # training data
-    label_names, flow_names = get_label_files(image_names, mask_filter, imf=image_filter)
+    label_names, flow_names = my_get_label_files(image_names) ########################## used my function
     
     images = []
     labels = []

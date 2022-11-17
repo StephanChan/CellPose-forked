@@ -8,10 +8,10 @@ from tqdm import trange
 from numba import njit, float32, int32, vectorize
 import cv2
 import fastremap
-
+import matplotlib.pyplot as plt
 import logging
 dynamics_logger = logging.getLogger(__name__)
-
+from PIL import Image
 import utils, metrics, transforms
 
 import torch
@@ -579,7 +579,12 @@ def remove_bad_flow_masks(masks, flows, threshold=0.4, use_gpu=False, device=Non
     
     """
     merrors, _ = metrics.flow_error(masks, flows, use_gpu, device)
+    # print(merrors)
+    # im=Image.fromarray(merrors.astype(np.float32))
+    # im.save(r'C:\Users\ScanImage\CellCounting\images\merrors.tif')
+    
     badi = 1+(merrors>threshold).nonzero()[0]
+    # print(badi)
     masks[np.isin(masks, badi)] = 0
     return masks
 
@@ -620,6 +625,8 @@ def get_masks(p, iscell=None, rpad=20):
     edges = []
     shape0 = p.shape[1:]
     dims = len(p)
+    # plt.figure()
+    # plt.imshow(iscell)
     if iscell is not None:
         if dims==3:
             inds = np.meshgrid(np.arange(shape0[0]), np.arange(shape0[1]),
@@ -629,22 +636,29 @@ def get_masks(p, iscell=None, rpad=20):
                      indexing='ij')
         for i in range(dims):
             p[i, ~iscell] = inds[i][~iscell]
-
+    # plt.figure()
+    # plt.imshow(p[0,:,:])
+    # print('p shape: ', p.shape)
     for i in range(dims):
         pflows.append(p[i].flatten().astype('int32'))
         edges.append(np.arange(-.5-rpad, shape0[i]+.5+rpad, 1))
-
+    # print('pflows shape: ',pflows[0].shape)
     h,_ = np.histogramdd(tuple(pflows), bins=edges)
+    # print('H shape: ',h.shape)
     hmax = h.copy()
     for i in range(dims):
         hmax = maximum_filter1d(hmax, 5, axis=i)
-
+    # plt.figure()
+    # plt.imshow(h)
+    # print('shape of hmax: ',hmax.shape)
+    # plt.figure()
+    # plt.imshow(hmax)
     seeds = np.nonzero(np.logical_and(h-hmax>-1e-6, h>10))
     Nmax = h[seeds]
     isort = np.argsort(Nmax)[::-1]
     for s in seeds:
         s = s[isort]
-
+    # print('s shape: ',s.shape)
     pix = list(np.array(seeds).T)
 
     shape = h.shape
@@ -698,33 +712,71 @@ def compute_masks(dP, cellprob, p=None, niter=200,
                    cellprob_threshold=0.0,
                    flow_threshold=0.4, interp=True, do_3D=False, 
                    min_size=15, resize=None, 
-                   use_gpu=False,device=None):
+                   use_gpu=False,device=None,BF=None,BF_check=False, my_mask=None):
     """ compute masks using dynamics from dP, cellprob, and boundary """
     
     cp_mask = cellprob > cellprob_threshold 
-
+    # plt.figure()
+    # plt.imshow(cp_mask)
+    # import pickle
+    # with open(r"C:\Users\ScanImage\CellCounting\images\cellprob", "wb") as fp:   #Pickling
+    #     pickle.dump(cellprob, fp)
+    # im=Image.fromarray(cellprob.astype(np.float32))
+    # im.save(r'C:\Users\ScanImage\CellCounting\images\cellprob.tif')
+    # im=Image.fromarray(cp_mask.astype(np.float32))
+    # im.save(r'C:\Users\ScanImage\CellCounting\images\cp_mask.tif')
+    # im=Image.fromarray(dP[0,:,:].astype(np.float32))
+    # im.save(r'C:\Users\ScanImage\CellCounting\images\dP.tif')
     if np.any(cp_mask): #mask at this point is a cell cluster binary map, not labels     
         # follow flows
+        # import pickle
+        # with open(r"C:\Users\ScanImage\CellCounting\images\dP", "wb") as fp:   #Pickling
+        #     pickle.dump(dP, fp)
         if p is None:
-            p, inds = follow_flows(dP * cp_mask / 5., niter=niter, interp=interp, 
-                                            use_gpu=use_gpu, device=device)
+            p, inds = follow_flows(dP * my_mask / 5., niter=niter, interp=interp,
+                                            use_gpu=use_gpu, device=device) ################################## using cp_mask
+            # with open(r"C:\Users\ScanImage\CellCounting\images\p", "wb") as fp:   #Pickling
+            #     pickle.dump(p, fp)
+            # im=Image.fromarray(p[0,:,:].astype(np.float32))
+            # im.save(r'C:\Users\ScanImage\CellCounting\images\p.tif')
+            
+            # print('shape of p: ',p.shape)
+            # plt.figure()
+            # plt.imshow(p[0,:,:])
+            # print(p[0,:,:])
+            # plt.figure()
+            # plt.imshow(p[1,:,:])
             if inds is None:
                 dynamics_logger.info('No cell pixels found.')
                 shape = resize if resize is not None else cellprob.shape
                 mask = np.zeros(shape, np.uint16)
                 p = np.zeros((len(shape), *shape), np.uint16)
                 return mask, p
-        
+        # print(p.shape)
+        # plt.imshow(p[0,:,:])
         #calculate masks
-        mask = get_masks(p, iscell=cp_mask)
-            
+        mask = get_masks(p, iscell=my_mask) #################################### using cp_mask
+        # print('shape of mask: ',mask.shape)
+        # plt.figure()
+        # plt.imshow(mask)
         # flow thresholding factored out of get_masks
         if not do_3D:
             shape0 = p.shape[1:]
             if mask.max()>0 and flow_threshold is not None and flow_threshold > 0:
                 # make sure labels are unique at output of get_masks
                 mask = remove_bad_flow_masks(mask, dP, threshold=flow_threshold, use_gpu=use_gpu, device=device)
-        
+                # plt.figure()
+                # plt.imshow(mask)
+                ratio=masks_roundness(mask)
+                mask=remove_noncells(mask, ratio, threshold1=0.45, threshold2=1.6)
+                # plt.figure()
+                # plt.imshow(mask)
+                if BF_check:
+                    std=BF_std(mask, BF)
+                    # print(std)
+                    mask=remove_outplane_cells(mask, std, threshold=10)
+                    # plt.figure()
+                    # plt.imshow(mask)
         if resize is not None:
             #if verbose:
             #    dynamics_logger.info(f'resizing output with resize = {resize}')
@@ -752,6 +804,7 @@ def compute_masks(dP, cellprob, p=None, niter=200,
     # moving the cleanup to the end helps avoid some bugs arising from scaling...
     # maybe better would be to rescale the min_size and hole_size parameters to do the
     # cleanup at the prediction scale, or switch depending on which one is bigger... 
+    # print('min size in dynamics: ',min_size)
     mask = utils.fill_holes_and_remove_small_masks(mask, min_size=min_size)
 
     if mask.dtype==np.uint32:
@@ -759,3 +812,94 @@ def compute_masks(dP, cellprob, p=None, niter=200,
 
     return mask, p
 
+def masks_roundness(masks):
+    """ convert masks to flows using diffusion from center pixel
+    Center of masks where diffusion starts is defined to be the 
+    closest pixel to the median of all pixels that is inside the 
+    mask. Result of diffusion is converted into flows by computing
+    the gradients of the diffusion density map. 
+    Parameters
+    -------------
+    masks: int, 2D array
+        labelled masks 0=NO masks; 1,2,...=mask labels
+    Returns
+    -------------
+    mu: float, 3D array 
+        flows in Y = mu[-2], flows in X = mu[-1].
+        if masks are 3D, flows in Z = mu[0].
+    mu_c: float, 2D array
+        for each pixel, the distance to the center of the mask 
+        in which it resides 
+    """
+    
+
+    nmask = masks.max()
+    ratio=np.zeros([nmask,2])
+    slices = scipy.ndimage.find_objects(masks)
+
+    for i,si in enumerate(slices):
+        if si is not None:
+            sr,sc = si
+            ly, lx = sr.stop - sr.start + 1, sc.stop - sc.start + 1
+            nonzero= np.sum(masks[sr, sc] == (i+1))
+            ratio[i,0]=nonzero/(ly*lx)
+            ratio[i,1]=ly/lx
+
+    return ratio
+
+def remove_noncells(masks, ratio, threshold1=0.5, threshold2=3):
+    badi = 1+(ratio[:,0]<threshold1).nonzero()[0]
+    badi2= 1+(ratio[:,1]>threshold2).nonzero()[0]
+    badi3= 1+(ratio[:,1]<1/threshold2).nonzero()[0]
+    # print(badi)
+    # print(badi2)
+    # print(badi3)
+    # print(ratio)
+    badi=np.concatenate([badi,badi2,badi3])
+    masks[np.isin(masks, badi)] = 0
+    return masks
+
+def BF_std(masks, BF):
+    """ convert masks to flows using diffusion from center pixel
+    Center of masks where diffusion starts is defined to be the 
+    closest pixel to the median of all pixels that is inside the 
+    mask. Result of diffusion is converted into flows by computing
+    the gradients of the diffusion density map. 
+    Parameters
+    -------------
+    masks: int, 2D array
+        labelled masks 0=NO masks; 1,2,...=mask labels
+    Returns
+    -------------
+    mu: float, 3D array 
+        flows in Y = mu[-2], flows in X = mu[-1].
+        if masks are 3D, flows in Z = mu[0].
+    mu_c: float, 2D array
+        for each pixel, the distance to the center of the mask 
+        in which it resides 
+    """
+    
+
+    nmask = masks.max()
+    std=np.zeros([nmask,1])
+    slices = scipy.ndimage.find_objects(masks)
+
+    for i,si in enumerate(slices):
+        if si is not None:
+            sr,sc = si
+            ly, lx = sr.stop - sr.start + 1, sc.stop - sc.start + 1
+            tmp=BF[sr,sc]
+            std[i]= np.std(tmp[masks[sr, sc]==(i+1)])
+
+    return std
+
+def remove_outplane_cells(masks, std, threshold=15):
+    badi = 1+(std[:]<threshold).nonzero()[0]
+
+    # print(badi)
+    # print(badi2)
+    # print(badi3)
+    # print(ratio)
+    # badi=np.concatenate([badi,badi2,badi3])
+    masks[np.isin(masks, badi)] = 0
+    return masks
